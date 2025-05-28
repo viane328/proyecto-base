@@ -1,9 +1,16 @@
 require('dotenv').config();
 const fs = require('fs');
-console.log('¿Existe .env?:', fs.existsSync('.env'));
-
+const { dbConnection } = require('./database/config.db');
 const Server = require('./models/server');
 
-const server = new Server();
+console.log("PORT desde app.js:", process.env.PORT);
+console.log('¿Existe .env?:', fs.existsSync('.env'));
 
-server.listen();
+const main = async () => {
+  await dbConnection(); // Conexión a la base de datos SQLite usando Prisma
+
+  const server = new Server();
+  server.listen();
+};
+
+main();
