@@ -1,74 +1,108 @@
 const { response, request } = require('express');
 const bcryptjs = require('bcryptjs');
+const { db } = require('../database/firestore.config');
 
-const Usuario = require('../models/usuario');
-const { validationResult } = require('express-validator');
+const usuariosGet = async (req = request, res = response) => {
+  const { limite = 5, desde = 0 } = req.query;
+  try {
+    const usuariosRef = db.collection('usuarios');
+    const snapshot = await usuariosRef.where('estado', '==', true).get();
 
-const usuariosGet= async (req = request, res = response) =>{
-    const {limite = 5, desde = 0 } = req.query;
-    const query = {estado : true};
-    
-    const [total, usuarios] = await Promise.all([
-        Usuario.count(query),
-        Usuario.find(query)
-            .skip(Number( desde ))
-            .limit(Number (limite) )
-    ])
-
-    res.json({
-        total,
-        usuarios
+    if (snapshot.empty) {
+      return res.json({ total: 0, usuarios: [] });
+    }
+    const todos = [];
+    snapshot.forEach(doc => {
+      todos.push({ id: doc.id, ...doc.data() });
     });
-}
+    // Simulamos paginación manual
+    const usuarios = todos.slice(Number(desde), Number(desde) + Number(limite));
+    res.json({ total: todos.length, usuarios });
+    } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error al obtener usuarios' });
+  }
+};
 
-const usuariosPost= async (req, res = response) =>{   
-    const {nombre, correo, password, rol} = req.body;    
-    const usuario = new Usuario({nombre, correo, password, rol});   
-    //Encriptar la contraseña
+const usuariosPost = async (req, res = response) => {
+  try {
+    const { nombre, correo, password, rol } = req.body;
+
+    // Encriptar la contraseña
     const salt = bcryptjs.genSaltSync();
-    usuario.password = bcryptjs.hashSync(password, salt);
-    //Guardar en base de datos
-    await usuario.save();
+    const passwordEncriptado = bcryptjs.hashSync(password, salt);
 
-    res.json({                        
-        usuario
+    // Crear el objeto del nuevo usuario
+    const nuevoUsuario = {
+      nombre,
+      correo,
+      password: passwordEncriptado,
+      rol,
+      estado: true
+    };
+
+    // Guardar en Firestore en la colección 'usuarios'
+    const docRef = await db.collection('usuarios').add(nuevoUsuario);
+
+    res.status(201).json({
+      msg: 'Usuario creado en Firebase',
+      id: docRef.id,
+      usuario: nuevoUsuario
     });
-}
 
-const usuariosPut= async (req, res = response) =>{
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error al crear usuario' });
+  }
+};
 
-    const {id} = req.params;
-    const {_id, password, google, correo, ...resto} = req.body;
+const usuariosPut = async (req, res = response) => {
+  const { id } = req.params;
+  const { password, ...resto } = req.body;
 
-    //TODO validar contra la base de datos
-    if(password){
-         //Encriptar la contraseña
-        const salt = bcryptjs.genSaltSync();
-        resto.password = bcryptjs.hashSync(password, salt);
+  try {
+    if (password) {
+      const salt = bcryptjs.genSaltSync();
+      resto.password = bcryptjs.hashSync(password, salt);
     }
 
-    const usuario = await Usuario.findByIdAndUpdate(id, resto);
+    const userRef = db.collection('usuarios').doc(id);
+    await userRef.update(resto);
 
-    res.json(usuario);
-}
+    const actualizado = await userRef.get();
 
+    res.json({ id, ...actualizado.data() });
 
-const usuariosDelete= async (req, res = response) =>{
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error al actualizar usuario' });
+  }
+};
 
-    const {id} = req.params;
-    
-    //borrado fisico
-    // const usuario = await Usuario.findByIdAndDelete( id );
-    //borrado logico
-    const usuario = await Usuario.findByIdAndUpdate( id, { estado : false });
+const usuariosDelete = async (req, res = response) => {
+  const { id } = req.params;
 
-    res.json(usuario);
-}
+  try {
+    const userRef = db.collection('usuarios').doc(id);
+    await userRef.update({ estado: false });
 
+    const usuarioActualizado = await userRef.get();
+
+    res.json({
+      msg: 'Usuario marcado como inactivo',
+      id,
+      ...usuarioActualizado.data()
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error al eliminar usuario' });
+  }
+};
 
 module.exports = {
-    usuariosGet,
-    usuariosPut,
-    usuariosPost,
-    usuariosDelete
-}
+  usuariosGet,
+  usuariosPost,
+  usuariosPut,
+  usuariosDelete
+};
