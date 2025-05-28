@@ -1,26 +1,19 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
-console.log("MONGO_CNN:", process.env.MONGO_URI);
+// database/config.db.js
+const { PrismaClient } = require('@prisma/client');
 
-const dbConnection = async() => {
+const prisma = new PrismaClient();
 
-    try{
-
-        await mongoose.connect( process.env.MONGO_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,         
-        });
-
-        console.log('Base de datos online');
-
-    }catch(error){
-        console.log(error);
-        throw new Error('Error a la hora de iniciar la base de datos');
-    }
-
-}
-
+const dbConnection = async () => {
+  try {
+    await prisma.$connect();
+    console.log('Base de datos SQLite conectada con Prisma');
+  } catch (error) {
+    console.error('Error al conectar con la base de datos:', error);
+    throw new Error('Error al iniciar la base de datos');
+  }
+};
 
 module.exports = {
-    dbConnection
-}
+  dbConnection,
+  prisma,
+};
